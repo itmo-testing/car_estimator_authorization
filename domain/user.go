@@ -12,6 +12,7 @@ type User struct {
 	Email string
 	Phone string
 	Password string
+	PasswordHash []byte
 	BirthDate time.Time
 	RegisterDate time.Time
 }

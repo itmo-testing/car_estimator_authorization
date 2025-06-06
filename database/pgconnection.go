@@ -7,6 +7,10 @@ import (
 	_ "github.com/lib/pq"
 )
 
+type Connection struct {
+	db *sql.DB
+}
+
 type Config struct {
 	Driver string
 	Addr string
@@ -23,6 +27,32 @@ func (conf *Config) getConnString(defaultConn bool) string {
 	return fmt.Sprintf(
 		"%s://%s@%s:%s/%s?sslmode=disable", conf.Driver, conf.User, conf.Password, conf.Addr, dbName,
 	)
+}
+
+func (c *Connection) Init(conf *Config) error {
+	if err := CreateDBIfNotExists(conf); err != nil {
+		return err
+	}
+
+	db, err := sql.Open(conf.Driver, conf.getConnString(false))
+	if err != nil {
+		fmt.Println("invalid connection arguments:", err)
+		return err	
+	}
+
+	if err := db.Ping(); err != nil {
+		fmt.Println("database connection failed:", err)
+		return err
+	}	
+	
+	c.db = db
+	return nil
+}
+
+func (c *Connection) Close() {
+	if c.db != nil {
+		c.db.Close()
+	}
 }
 
 func CreateDBIfNotExists(conf *Config) error {
@@ -50,34 +80,4 @@ func CreateDBIfNotExists(conf *Config) error {
 	}
 
 	return nil
-}
-
-type Connection struct {
-	db *sql.DB
-}
-
-func (c *Connection) Init(conf *Config) error {
-	if err := CreateDBIfNotExists(conf); err != nil {
-		return err
-	}
-
-	db, err := sql.Open(conf.Driver, conf.getConnString(false))
-	if err != nil {
-		fmt.Println("invalid connection arguments:", err)
-		return err	
-	}
-
-	if err := db.Ping(); err != nil {
-		fmt.Println("database connection failed:", err)
-		return err
-	}	
-	
-	c.db = db
-	return nil
-}
-
-func (c *Connection) Close() {
-	if c.db != nil {
-		c.db.Close()
-	}
 }
