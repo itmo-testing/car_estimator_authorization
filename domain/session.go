@@ -7,11 +7,13 @@ import (
 )
 
 type Session struct {
-	Id uuid.UUID
-	UserId uuid.UUID
-	RefreshToken string
-	IpAddress string
-	UserAgent string
-	CreatedAt time.Time
-	ExpiresIn time.Time
+	UserId    uuid.UUID `json:"userId"`
+	Email 	  string `json:"email"`
+	CreatedAt time.Time `json:"createdAt"`
+	Source
+}
+
+type Source struct {
+	IpAddress string `json:"addr"`
+	UserAgent string `json:"ua"`
 }

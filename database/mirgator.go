@@ -4,26 +4,27 @@ import (
 	"fmt"
 
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "github.com/lib/pq"
 )
 
 type Migrator struct {
 	migrationTool 	*migrate.Migrate
 }
 
-func (m *Migrator) Init(conn *Connection, conf *Config, path string) error {
-	driver, _ := postgres.WithInstance(conn.db, &postgres.Config{})
-	newMigrationTool, err := migrate.NewWithDatabaseInstance(
-        "file://" + path, conf.Driver, driver)
+func NewMigrator(conf *Config, path string) (*Migrator, error) {
+	newMigrationTool, err := migrate.New(
+        "file://" + path, conf.GetPgConnString(false))
 
 	if err != nil {
 		fmt.Println("Error occured trying to init migration tool - ", err)
-		return err
+		return nil, err
 	}
 
-	m.migrationTool = newMigrationTool
-	return nil
+	return &Migrator{
+		migrationTool: newMigrationTool,
+	}, nil
 }
 
 func (m *Migrator) Apply() error {

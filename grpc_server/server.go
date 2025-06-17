@@ -8,26 +8,48 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/google/uuid"
-	pb "github.com/nikita-itmo-gh-acc/car_estimator_api_contracts/gen"
+	pb "github.com/nikita-itmo-gh-acc/car_estimator_api_contracts/gen/profile_v1"
+	"github.com/nikita-itmo-gh-acc/car_estimator_authorization/database"
 	"github.com/nikita-itmo-gh-acc/car_estimator_authorization/domain"
 	"github.com/nikita-itmo-gh-acc/car_estimator_authorization/services"
 )
 
 type ServerAPI struct {
 	Auth IAuthService
-	pb.UnimplementedAuthServiceServer
+	Registrar IRegistrarSesvice
+	pb.UnimplementedProfileServiceServer
 }
 
 type IAuthService interface {
-	Login(ctx context.Context, email string, password string) (token string, err error)
-	Register(ctx context.Context, user domain.User) (userId uuid.UUID, err error)
-	// Refresh(ctx context.Context, )
+	Login(ctx context.Context, email, password string, source domain.Source) (*domain.TokenPair, error)
+	Logout(ctx context.Context, refreshToken string) error
+	Refresh(ctx context.Context, refreshToken string, source domain.Source) (*domain.TokenPair, error)
 }
 
-func RegisterServer(srv *grpc.Server, auth IAuthService) {
-	pb.RegisterAuthServiceServer(srv, &ServerAPI{ Auth: auth })
+type IRegistrarSesvice interface {
+	Register(ctx context.Context, user domain.User) (userId uuid.UUID, err error)
+	Unregister(ctx context.Context, refreshToken string) error
+}
+
+func RegisterServer(srv *grpc.Server, auth IAuthService, reg IRegistrarSesvice) {
+	pb.RegisterProfileServiceServer(srv, &ServerAPI{ Auth: auth, Registrar: reg })
+}
+
+func GetRefreshToken(ctx context.Context) (string, error) {
+	val := ctx.Value("refreshToken")
+	if val == nil {
+		return "", status.Error(codes.Unauthenticated, "can't find refresh token")
+	}
+
+	rt, ok := val.(string)
+	if !ok {
+		return "", status.Error(codes.InvalidArgument, "refresh token must be string")
+	}
+
+	return rt, nil
 }
 
 func (s *ServerAPI) Login(ctx context.Context, in *pb.LoginRequest) (t *pb.TokenResponse, err error) {
@@ -39,7 +61,9 @@ func (s *ServerAPI) Login(ctx context.Context, in *pb.LoginRequest) (t *pb.Token
 		return nil, status.Error(codes.InvalidArgument, "password is required")
 	}
 
-	token, err := s.Auth.Login(ctx, in.GetEmail(), in.GetPassword())
+	data := in.GetSource()
+
+	tokens, err := s.Auth.Login(ctx, in.GetEmail(), in.GetPassword(), domain.Source{IpAddress: data.Ip, UserAgent: data.UserAgent})
 	if err != nil {
 		if errors.Is(err, services.ErrInvalidCredentials) {
 			return nil, status.Error(codes.InvalidArgument, "wrong email or password")
@@ -48,7 +72,26 @@ func (s *ServerAPI) Login(ctx context.Context, in *pb.LoginRequest) (t *pb.Token
 		return nil, status.Error(codes.Internal, "login failed")
 	}
 
-	return &pb.TokenResponse{AccessToken: token}, nil
+	return &pb.TokenResponse{
+		AccessToken: tokens.Access, 
+		RefreshToken: tokens.Refresh,
+	}, nil
+}
+
+func (s *ServerAPI) Logout(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error) {
+	refreshToken, err := GetRefreshToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = s.Auth.Logout(ctx, refreshToken); err != nil {
+		if errors.Is(err, database.ErrSessionNotFound) {
+			return nil, status.Error(codes.Unauthenticated, "user session not found")
+		}
+		return nil, status.Error(codes.Internal, "logout failed")
+	}
+
+	return &emptypb.Empty{}, nil
 }
 
 func (s *ServerAPI) Register(ctx context.Context, in *pb.RegisterRequest) (t *pb.RegisterResponse, err error) {
@@ -69,7 +112,7 @@ func (s *ServerAPI) Register(ctx context.Context, in *pb.RegisterRequest) (t *pb
 		BirthDate: time.Unix(in.Birthdate, 0),
 	}
 
-	userId, err := s.Auth.Register(ctx, newUser)
+	userId, err := s.Registrar.Register(ctx, newUser)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "registration failed")
 	}
@@ -78,6 +121,48 @@ func (s *ServerAPI) Register(ctx context.Context, in *pb.RegisterRequest) (t *pb
 	return &pb.RegisterResponse{UserId: uuid}, nil
 }
 
-func (s *ServerAPI) Refresh(ctx context.Context, in *pb.RefreshRequest) (t *pb.TokenResponse, err error) {
-	return &pb.TokenResponse{}, nil // пока что заглушка
+func (s *ServerAPI) Unregister(ctx context.Context, in *pb.UnregiserRequest) (*emptypb.Empty, error) {
+	refreshToken, err := GetRefreshToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = s.Registrar.Unregister(ctx, refreshToken); err != nil {
+		if errors.Is(err, database.ErrSessionNotFound) {
+			return nil, status.Error(codes.Unauthenticated, "user session not found")
+		}
+
+		return nil, status.Error(codes.Internal, "user unregister failed")
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
+func (s *ServerAPI) Refresh(ctx context.Context, in *pb.SourceData) (t *pb.TokenResponse, err error) {
+	refreshToken, err := GetRefreshToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	source := domain.Source{
+		IpAddress: in.GetIp(),
+		UserAgent: in.GetUserAgent(),
+	}
+
+	tokens, err := s.Auth.Refresh(ctx, refreshToken, source)
+	if err != nil {
+		switch {
+		case errors.Is(err, database.ErrSessionNotFound):
+			return nil,	status.Error(codes.Unauthenticated, "user session not found")
+		case errors.Is(err, services.ErrSourceChanged):
+			return nil, status.Error(codes.PermissionDenied, "attempt to enter from unknown device")
+		default:
+			return nil, status.Error(codes.Internal, "tokens refresh failed")
+		}
+	}
+
+	return &pb.TokenResponse{
+		AccessToken: tokens.Access, 
+		RefreshToken: tokens.Refresh,
+	}, nil
 }

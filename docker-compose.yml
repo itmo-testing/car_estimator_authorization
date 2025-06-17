@@ -1,0 +1,55 @@
+version: '3'
+
+services:
+  db:
+    image: postgres:alpine
+    container_name: db_container
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_DB=${PG_NAME}
+      - POSTGRES_USER=${PG_USER}
+      - POSTGRES_PASSWORD=${PG_PASSWORD} 
+    restart: always
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 50s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - pgData:/var/lib/postgresql/data
+  redis:
+    image: redis:latest
+    container_name: redis_container
+    ports:
+      - 6379:6379
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_USER=${REDIS_USER}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+      start_period: 10s
+    restart: always
+    volumes:
+      - redisData:/data
+  app:
+    build:
+      context: .
+    container_name: auth_service_container
+    ports:
+      - 4444:4444
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgData:
+  redisData:

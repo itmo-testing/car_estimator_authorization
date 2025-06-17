@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/nikita-itmo-gh-acc/car_estimator_authorization/database"
 	"github.com/nikita-itmo-gh-acc/car_estimator_authorization/domain"
 
@@ -16,34 +15,54 @@ import (
 
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrSourceChanged = errors.New("source changed")
 )
 
 type IUserProvider interface {
 	Get(ctx context.Context, email string) (*domain.User, error)
 }
 
-type IUserSaver interface {
-	Save(ctx context.Context, user domain.User) error
+type ISessionProvider interface {
+	Get(ctx context.Context, token string) (*domain.Session, error) 
+}
+
+type ISessionSaver interface {
+	Save(ctx context.Context, session *domain.Session, expiresIn time.Duration) (string, error)
+}
+
+type ISessionRemover interface {
+	Delete(ctx context.Context, token string) error
 }
 
 type AuthService struct {
 	userProvider IUserProvider
-	userSaver IUserSaver
+	sessionProvider ISessionProvider
+	sessionSaver ISessionSaver
+	sessionRemover ISessionRemover
 	logger *slog.Logger
 }
 
-func NewAuthService (provider IUserProvider, saver IUserSaver, logger *slog.Logger) *AuthService {
+func NewAuthService (
+		userProvider IUserProvider,
+		sessionProvider ISessionProvider, 
+		sessionSaver ISessionSaver,
+		sessionRemover ISessionRemover,
+		logger *slog.Logger) *AuthService {
 	return &AuthService{
-		userProvider: provider,
-		userSaver: saver,
+		userProvider: userProvider,
+		sessionProvider: sessionProvider,
+		sessionSaver: sessionSaver,
+		sessionRemover: sessionRemover,
 		logger: logger,
 	}
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (token string, err error) {
+func (s *AuthService) Login(ctx context.Context, email, password string, source domain.Source) (*domain.TokenPair, error) {
 	log := s.logger.With(
 		slog.String("operation", "login"),
 		slog.String("email", email),
+		slog.String("ip address", source.IpAddress),
+		slog.String("user agent", source.UserAgent),
 	)
 
 	log.Info("authorization attempt...")
@@ -53,48 +72,93 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (token 
 		if errors.Is(err, database.ErrUserNotFound) {
 			s.logger.WarnContext(ctx, "user not found", slog.Any("error", err))
 		}
-		return "", fmt.Errorf("login error - %w", ErrInvalidCredentials)
+		return nil, fmt.Errorf("login error - %w", ErrInvalidCredentials)
 	}
 
 	if err := bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(password)); err != nil {
-		return "", fmt.Errorf("login error - %w", ErrInvalidCredentials)
+		return nil, fmt.Errorf("login error - %w", ErrInvalidCredentials)
 	}
 	
-	if token, err = CreateJWT(user); err != nil {
-		return "", err
+	accessToken, err := CreateJWT(user)
+	if err != nil {
+		return nil, err
+	}
+
+	newSession := &domain.Session{
+		UserId: user.Id,
+		Email: user.Email,
+		Source: source,
+		CreatedAt: time.Now(),
+	}
+
+	refreshToken, err := s.sessionSaver.Save(ctx, newSession, time.Hour * 24 * 30)
+	if err != nil {
+		return nil, err
 	}
 
 	log.Info("successfully logged in!")
-	return token, nil
+	return &domain.TokenPair{
+		Access: accessToken,
+		Refresh: refreshToken,
+	}, nil
 }
 
-
-func (s *AuthService) Register(ctx context.Context, user domain.User) (userId uuid.UUID, err error) {
+func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	log := s.logger.With(
-		slog.String("operation", "register"),
-		slog.String("name", user.FullName),
-		slog.String("email", user.Email),
+		slog.String("operation", "logout"),
 	)
 
-	log.Info("proceeding registration...")
+	log.Info("exiting the system...")
 
-	user.Id = uuid.New()
-	user.RegisterDate = time.Now()
-
-	user.PasswordHash, err = bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to generate password hash", slog.Any("error", err))
-		return uuid.UUID{}, err
-	}
-
-	if err = s.userSaver.Save(ctx, user); err != nil {
-		if errors.Is(err, database.ErrUserAlreadyExists) {
-			s.logger.WarnContext(ctx, "user already exists")
+	if err := s.sessionRemover.Delete(ctx, refreshToken); err != nil {
+		if errors.Is(err, database.ErrSessionNotFound) {
+			s.logger.WarnContext(ctx, "session is not found", slog.Any("error", err))
 		}
-		s.logger.ErrorContext(ctx, "failed to register user", slog.Any("error", err))
-		return uuid.UUID{}, err
+		return fmt.Errorf("logout error - %w", err)
 	}
 
-	log.Info("registration complete!")
-	return user.Id, nil
+	log.Info("successfully exited!")
+	return nil
+}
+
+func (s *AuthService) Refresh(ctx context.Context, refreshToken string, source domain.Source) (*domain.TokenPair, error) {
+	log := s.logger.With(
+		slog.String("operation", "refresh"),
+		slog.String("ip address", source.IpAddress),
+		slog.String("user agent", source.UserAgent),
+	)
+
+	log.Info("try to refresh tokens...")
+
+	session, err := s.sessionProvider.Get(ctx, refreshToken)
+	if err != nil {
+		if errors.Is(err, database.ErrSessionNotFound) {
+			s.logger.WarnContext(ctx, "no session found", slog.Any("error", err))
+		}
+		return nil, fmt.Errorf("refresh error - %w", err)
+	}
+
+	if err = s.sessionRemover.Delete(ctx, refreshToken); err != nil {
+		return nil, fmt.Errorf("refresh error - %w", err)
+	}
+
+	if session.IpAddress != source.IpAddress && session.UserAgent != source.UserAgent {
+		return nil, ErrSourceChanged
+	}
+
+	newRefreshToken, err := s.sessionSaver.Save(ctx, session, time.Hour * 24 * 30)
+	if err != nil {
+		return nil, err
+	}
+
+	accessToken, err := CreateJWT(&domain.User{Id: session.UserId, Email: session.Email})
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info("successfully refreshed tokens!")
+	return &domain.TokenPair{
+		Access: accessToken,
+		Refresh: newRefreshToken,
+	}, nil
 }

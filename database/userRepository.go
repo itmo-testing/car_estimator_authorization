@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/nikita-itmo-gh-acc/car_estimator_authorization/domain"
 )
@@ -15,14 +16,58 @@ var (
 	ErrUserAlreadyExists = errors.New("user already exists")
 )
 
+
 type UserRepository struct {
 	db *sql.DB
 }
 
-func NewUserRepo(conn *Connection) *UserRepository {
-	return &UserRepository{
-		db: conn.db,
+func NewUserRepository(conf *Config) (*UserRepository, error) {
+	if err := CreateDBIfNotExists(conf); err != nil {
+		return nil, err
 	}
+
+	db, err := sql.Open(conf.Driver, conf.GetPgConnString(false))
+	if err != nil {
+		fmt.Println("invalid connection arguments:", err)
+		return nil, err	
+	}
+
+	if err := db.Ping(); err != nil {
+		fmt.Println("database connection failed:", err)
+		return nil, err
+	}	
+	
+	return &UserRepository{
+		db: db,
+	}, nil
+}
+
+func CreateDBIfNotExists(conf *Config) error {
+	defaultConn, err := sql.Open(conf.Driver, conf.GetPgConnString(true))
+	if err != nil {
+		fmt.Println("invalid default connection arguments:", err)
+		return err
+	}
+
+	defer defaultConn.Close()
+	var exists bool
+
+	query := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = '%s')", conf.DBName)
+	err = defaultConn.QueryRow(query).Scan(&exists)
+	if err != nil {
+		fmt.Println("database existense check query failed:", err)
+		return err
+	}
+
+	if !exists {
+		_, err := defaultConn.Exec("CREATE DATABASE " + conf.DBName)
+		if err != nil {
+			fmt.Println("database creation failed:", err)
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *UserRepository) Save(ctx context.Context, user domain.User) error {
@@ -55,4 +100,25 @@ func (r *UserRepository) Get(ctx context.Context, email string) (*domain.User, e
 	}
 
 	return &user, nil
+}
+
+func (r *UserRepository) Delete(ctx context.Context, userId uuid.UUID) error {
+	query := "DELETE FROM users WHERE id=$1;"
+
+	result, err := r.db.ExecContext(ctx, query); 
+	if err != nil {
+		return fmt.Errorf("user remove operation failed: %w", err)
+	}
+
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return ErrUserNotFound
+	}
+
+	return nil
+}
+
+func (r *UserRepository) Exit() {
+	if r.db != nil {
+		r.db.Close()
+	}
 }
