@@ -31,10 +31,12 @@ func TestRegister(t *testing.T) {
 		{
 			name: "register new user",
 			args: domain.User{
-				FullName: "Ananiev Nikita",
-				Email: "nikita-ananiev@mail.ru",
+				UserPublic: domain.UserPublic{
+					FullName: "Ananiev Nikita",
+					Email: "nikita-ananiev@mail.ru",
+					BirthDate: time.Date(2004, time.June, 24, 0, 0, 0, 0, time.Local),
+				},
 				Password: "qwertty",
-				BirthDate: time.Date(2004, time.June, 24, 0, 0, 0, 0, time.Local),
 			},
 			code: codes.OK,
 			wantErr: false,
@@ -42,9 +44,11 @@ func TestRegister(t *testing.T) {
 		{
 			name: "missing email register",
 			args: domain.User{
-				FullName: "Shalunov Andrew",
+				UserPublic: domain.UserPublic{
+					FullName: "Shalunov Andrew",
+					BirthDate: time.Date(2003, time.December, 19, 0, 0, 0, 0, time.Local),
+				},
 				Password: "123465",
-				BirthDate: time.Date(2003, time.December, 19, 0, 0, 0, 0, time.Local),
 			},
 			code: codes.InvalidArgument,
 			wantErr: true,
@@ -52,10 +56,12 @@ func TestRegister(t *testing.T) {
 		{
 			name: "duplicate email register",
 			args: domain.User{
-				FullName: "Ospelnikov Alex",
-				Email: "nikita-ananiev@mail.ru",
+				UserPublic: domain.UserPublic{
+					FullName: "Ospelnikov Alex",
+					Email: "nikita-ananiev@mail.ru",
+					BirthDate: time.Date(2004, time.September, 17, 0, 0, 0, 0, time.Local),
+				},
 				Password: "1qazxsw2",
-				BirthDate: time.Date(2004, time.September, 17, 0, 0, 0, 0, time.Local),
 			},
 			code: codes.AlreadyExists,
 			wantErr: true,

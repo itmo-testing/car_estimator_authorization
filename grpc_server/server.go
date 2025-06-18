@@ -26,6 +26,7 @@ type ServerAPI struct {
 type IAuthService interface {
 	Login(ctx context.Context, email, password string, source domain.Source) (*domain.TokenPair, error)
 	Logout(ctx context.Context, refreshToken string) error
+	GetUser(ctx context.Context, userId uuid.UUID) (*domain.UserPublic, error)
 	Refresh(ctx context.Context, refreshToken string, source domain.Source) (*domain.TokenPair, error)
 }
 
@@ -106,10 +107,13 @@ func (s *ServerAPI) Register(ctx context.Context, in *pb.RegisterRequest) (t *pb
 	}
 
 	newUser := domain.User{
-		FullName: in.Fullname,
-		Email: in.Email,
+		UserPublic: domain.UserPublic{
+			FullName: in.Fullname,
+			Email: in.Email,
+			Phone: in.Phone,
+			BirthDate: time.Unix(in.Birthdate, 0),
+		},
 		Password: in.Password,
-		BirthDate: time.Unix(in.Birthdate, 0),
 	}
 
 	userId, err := s.Registrar.Register(ctx, newUser)
@@ -124,7 +128,7 @@ func (s *ServerAPI) Register(ctx context.Context, in *pb.RegisterRequest) (t *pb
 	return &pb.RegisterResponse{UserId: uuid}, nil
 }
 
-func (s *ServerAPI) Unregister(ctx context.Context, in *pb.UnregiserRequest) (*emptypb.Empty, error) {
+func (s *ServerAPI) Unregister(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error) {
 	refreshToken, err := GetRefreshToken(ctx)
 	if err != nil {
 		return nil, err

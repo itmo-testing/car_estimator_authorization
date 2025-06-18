@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nikita-itmo-gh-acc/car_estimator_authorization/database"
 	"github.com/nikita-itmo-gh-acc/car_estimator_authorization/domain"
 
@@ -20,6 +21,7 @@ var (
 
 type IUserProvider interface {
 	Get(ctx context.Context, email string) (*domain.User, error)
+	GetById(ctx context.Context, userId uuid.UUID) (*domain.User, error)
 }
 
 type ISessionProvider interface {
@@ -121,6 +123,29 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	return nil
 }
 
+func (s *AuthService) GetUser(ctx context.Context, userId uuid.UUID) (*domain.UserPublic, error) {
+	log := s.logger.With(
+		slog.String("operation", "get user"),
+		slog.String("User ID", userId.String()),
+	)
+
+	log.Info("try to retreive user from database...")
+
+	user, err := s.userProvider.GetById(ctx, userId)
+	if err != nil {
+		if errors.Is(err, database.ErrUserNotFound) {
+			s.logger.WarnContext(ctx, "user not found", slog.Any("error", err))
+		}
+		return nil, fmt.Errorf("get user error - %w", err)
+	}
+
+	log.Info("successfully retreived user!", 
+		slog.Any("user data", user.UserPublic),
+	)
+
+	return &user.UserPublic, nil
+}
+
 func (s *AuthService) Refresh(ctx context.Context, refreshToken string, source domain.Source) (*domain.TokenPair, error) {
 	log := s.logger.With(
 		slog.String("operation", "refresh"),
@@ -151,7 +176,13 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string, source d
 		return nil, err
 	}
 
-	accessToken, err := CreateJWT(&domain.User{Id: session.UserId, Email: session.Email})
+	accessToken, err := CreateJWT(&domain.User{
+		UserPublic: domain.UserPublic{
+			Id: session.UserId, 
+			Email: session.Email,
+		},
+	})
+
 	if err != nil {
 		return nil, err
 	}

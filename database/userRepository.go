@@ -108,6 +108,22 @@ func (r *UserRepository) Get(ctx context.Context, email string) (*domain.User, e
 	return &user, nil
 }
 
+func (r *UserRepository) GetById(ctx context.Context, userId uuid.UUID) (*domain.User, error) {
+	user := domain.User{}
+	query := "SELECT * FROM users WHERE id=$1;"
+	
+	if err := r.db.QueryRowContext(ctx, query, userId).Scan(
+		&user.Id, &user.FullName, &user.Email, &user.Phone, &user.PasswordHash, &user.BirthDate, &user.RegisterDate,
+	); err != nil {
+		if err == sql.ErrNoRows {
+            return nil, fmt.Errorf("can't find user with id=%s - %w", userId, ErrUserNotFound)
+        }
+		return nil, fmt.Errorf("user retrieve by id operation failed: %w", err)
+	}
+
+	return &user, nil
+}
+
 func (r *UserRepository) Delete(ctx context.Context, userId uuid.UUID) error {
 	query := "DELETE FROM users WHERE id=$1;"
 
