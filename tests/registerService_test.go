@@ -17,7 +17,7 @@ import (
 
 type TestCase struct {
 	name string
-	user domain.User
+	args any
 	code codes.Code
 	wantErr bool
 }
@@ -30,7 +30,7 @@ func TestRegister(t *testing.T) {
 	tests := []TestCase{
 		{
 			name: "register new user",
-			user: domain.User{
+			args: domain.User{
 				FullName: "Ananiev Nikita",
 				Email: "nikita-ananiev@mail.ru",
 				Password: "qwertty",
@@ -41,7 +41,7 @@ func TestRegister(t *testing.T) {
 		},
 		{
 			name: "missing email register",
-			user: domain.User{
+			args: domain.User{
 				FullName: "Shalunov Andrew",
 				Password: "123465",
 				BirthDate: time.Date(2003, time.December, 19, 0, 0, 0, 0, time.Local),
@@ -51,7 +51,7 @@ func TestRegister(t *testing.T) {
 		},
 		{
 			name: "duplicate email register",
-			user: domain.User{
+			args: domain.User{
 				FullName: "Ospelnikov Alex",
 				Email: "nikita-ananiev@mail.ru",
 				Password: "1qazxsw2",
@@ -66,12 +66,17 @@ func TestRegister(t *testing.T) {
 
 	for idx, tt := range tests {
 		fmt.Printf("[%d] name: %s\n", idx, tt.name)
+		user, ok := tt.args.(domain.User)
+		if !ok {
+			t.Errorf("unexpected args for the test")
+			continue
+		}
 
 		resp, err := client.Register(ctx, &pb.RegisterRequest{
-			Fullname: tt.user.FullName,
-			Email: tt.user.Email,
-			Password: tt.user.Password,
-			Birthdate: tt.user.BirthDate.Unix(),
+			Fullname: user.FullName,
+			Email: user.Email,
+			Password: user.Password,
+			Birthdate: user.BirthDate.Unix(),
 		})
 
 		if (err != nil) != tt.wantErr {

@@ -14,6 +14,7 @@ import (
 var (
 	ErrUserNotFound = errors.New("no user found")
 	ErrUserAlreadyExists = errors.New("user already exists")
+	ErrNullViolation = errors.New("not null violation")
 )
 
 
@@ -77,8 +78,13 @@ func (r *UserRepository) Save(ctx context.Context, user domain.User) error {
 	)
 
 	if err != nil {
-		if pgerr, ok := err.(*pq.Error); ok && pgerr.Code == "23505" {
-			return fmt.Errorf("unique constraint violation - %w", ErrUserAlreadyExists)
+		if pgerr, ok := err.(*pq.Error); ok {
+			switch pgerr.Code {
+			case "23505":
+				return fmt.Errorf("unique constraint violation - %w", ErrUserAlreadyExists)
+			case "23502":
+				return ErrNullViolation
+			}
 		}
 		return fmt.Errorf("saving operation failed: %w", err)
 	}

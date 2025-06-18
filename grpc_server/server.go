@@ -114,6 +114,9 @@ func (s *ServerAPI) Register(ctx context.Context, in *pb.RegisterRequest) (t *pb
 
 	userId, err := s.Registrar.Register(ctx, newUser)
 	if err != nil {
+		if errors.Is(err, database.ErrUserAlreadyExists) {
+			return nil, status.Error(codes.AlreadyExists, "user already exists")
+		}
 		return nil, status.Error(codes.Internal, "registration failed")
 	}
 
