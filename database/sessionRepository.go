@@ -64,11 +64,13 @@ func (r *SessionRepository) Save(ctx context.Context, session *domain.Session, e
 }
 
 func (r *SessionRepository) Delete(ctx context.Context, token string) error {
-	if err := r.client.Del(ctx, storageName + token).Err(); err != nil {
-		if err == redis.Nil {
-			return ErrSessionNotFound
-		}
+	deleted, err := r.client.Del(ctx, storageName + token).Result(); 
+	if err != nil {
 		return fmt.Errorf("redis error - session delete failed: %w", err)
+	}
+
+	if deleted == 0 {
+		return ErrSessionNotFound
 	}
 	return nil
 }

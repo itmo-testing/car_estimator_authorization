@@ -19,6 +19,8 @@ services:
       start_period: 10s
     volumes:
       - pgData:/var/lib/postgresql/data
+    networks:
+      - shared_network
   redis:
     image: redis:latest
     container_name: redis_container
@@ -36,6 +38,8 @@ services:
     restart: always
     volumes:
       - redisData:/data
+    networks:
+      - shared_network
   app:
     build:
       context: .
@@ -49,7 +53,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - shared_network
 
 volumes:
   pgData:
   redisData:
+
+networks:
+  shared_network:
+    external: true

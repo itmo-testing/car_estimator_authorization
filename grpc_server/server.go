@@ -3,6 +3,7 @@ package grpc_server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"google.golang.org/grpc"
@@ -93,6 +94,36 @@ func (s *ServerAPI) Logout(ctx context.Context, in *emptypb.Empty) (*emptypb.Emp
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+func (s *ServerAPI) GetUser(ctx context.Context, in *pb.UserRequest) (*pb.UserResponse, error) {
+	if in.GetUserId() == nil {
+		return nil, status.Error(codes.InvalidArgument, "userId is required")
+	}
+
+	id, err := uuid.Parse(in.GetUserId().GetValue())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "userId has wrong format")
+	}
+
+	user, err := s.Auth.GetUser(ctx, id)
+	if err != nil {
+		if errors.Is(err, database.ErrUserNotFound) {
+			return nil, status.Error(codes.NotFound, fmt.Sprintf("user with id=%s not found", id.String()))
+		}
+		return nil, status.Error(codes.Internal, "user retreive op failed")
+	}
+
+	return &pb.UserResponse{
+		UserId: &pb.UUID{
+			Value: user.Id.String(),
+		},
+		Fullname: user.FullName,
+		Email: user.Email,
+		Phone: user.Phone,
+		Birthdate: user.BirthDate.Unix(),
+		Registerdate: user.RegisterDate.Unix(),
+	}, nil
 }
 
 func (s *ServerAPI) Register(ctx context.Context, in *pb.RegisterRequest) (t *pb.RegisterResponse, err error) {
