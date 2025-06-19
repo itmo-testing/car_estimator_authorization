@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"google.golang.org/grpc"
@@ -67,11 +68,14 @@ func (s *ServerAPI) Login(ctx context.Context, in *pb.LoginRequest) (t *pb.Token
 
 	tokens, err := s.Auth.Login(ctx, in.GetEmail(), in.GetPassword(), domain.Source{IpAddress: data.Ip, UserAgent: data.UserAgent})
 	if err != nil {
-		if errors.Is(err, services.ErrInvalidCredentials) {
+		switch {
+		case errors.Is(err, services.ErrInvalidCredentials):
 			return nil, status.Error(codes.InvalidArgument, "wrong email or password")
+		case errors.Is(err, services.ErrAlreadyLoggedIn):
+			return nil, status.Error(codes.AlreadyExists, "user already logged in")
+		default:
+			return nil, status.Error(codes.Internal, "login failed")
 		}
-
-		return nil, status.Error(codes.Internal, "login failed")
 	}
 
 	return &pb.TokenResponse{
@@ -166,6 +170,7 @@ func (s *ServerAPI) Unregister(ctx context.Context, in *emptypb.Empty) (*emptypb
 	}
 
 	if err = s.Registrar.Unregister(ctx, refreshToken); err != nil {
+		log.Println(err)
 		if errors.Is(err, database.ErrSessionNotFound) {
 			return nil, status.Error(codes.Unauthenticated, "user session not found")
 		}

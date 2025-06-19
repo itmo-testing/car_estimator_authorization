@@ -127,7 +127,7 @@ func (r *UserRepository) GetById(ctx context.Context, userId uuid.UUID) (*domain
 func (r *UserRepository) Delete(ctx context.Context, userId uuid.UUID) error {
 	query := "DELETE FROM users WHERE id=$1;"
 
-	result, err := r.db.ExecContext(ctx, query); 
+	result, err := r.db.ExecContext(ctx, query, userId)
 	if err != nil {
 		return fmt.Errorf("user remove operation failed: %w", err)
 	}

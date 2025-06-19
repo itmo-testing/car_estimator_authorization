@@ -91,7 +91,7 @@ func (s *RegistrarService) Unregister(ctx context.Context, refreshToken string) 
 
 	log = log.With(slog.String("userId", session.UserId.String()))
 
-	if err = s.sessionRemover.Delete(ctx, refreshToken); err != nil {
+	if err = s.sessionRemover.DeleteUserSessions(ctx, session.UserId); err != nil {
 		return fmt.Errorf("unregister error - %w", err)
 	}
 

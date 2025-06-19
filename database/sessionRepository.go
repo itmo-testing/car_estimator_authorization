@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nikita-itmo-gh-acc/car_estimator_authorization/domain"
 	"github.com/redis/go-redis/v9"
 )
 
 var (
-	storageName = "sessions:"
 	random = rand.New(rand.NewSource(time.Now().UnixNano()))
 	refreshTokenLen = 64
 	ErrSessionNotFound = errors.New("session not found")
@@ -57,27 +58,53 @@ func (r *SessionRepository) Save(ctx context.Context, session *domain.Session, e
 	}
 
 	newToken := generateRefreshToken()
-	if err := r.client.Set(ctx, storageName + newToken, binary, expiresIn).Err(); err != nil {
+	if err = r.client.Set(ctx, newToken, binary, expiresIn).Err(); err != nil {
 		return "", fmt.Errorf("redis error - session saving failed: %w", err)
+	}
+
+	if err = r.client.SAdd(ctx, session.UserId.String(), newToken).Err(); err != nil {
+		return "", fmt.Errorf("redis error - can't add to user sessions set: %w", err)
 	}
 	return newToken, nil
 }
 
 func (r *SessionRepository) Delete(ctx context.Context, token string) error {
-	deleted, err := r.client.Del(ctx, storageName + token).Result(); 
+	session, err := r.Get(ctx, token)
 	if err != nil {
-		return fmt.Errorf("redis error - session delete failed: %w", err)
+		return err
 	}
 
-	if deleted == 0 {
-		return ErrSessionNotFound
+	_, err = r.client.Pipelined(ctx, func(pipe redis.Pipeliner) error {
+		pipe.Del(ctx, token)
+        pipe.SRem(ctx, session.UserId.String(), token)
+        return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("redis error - can't delete user session: %w", err)
 	}
+
 	return nil
+}
+
+func (r *SessionRepository) DeleteUserSessions(ctx context.Context, userId uuid.UUID) error {
+	sessions, err := r.client.SMembers(ctx, userId.String()).Result()
+    if err != nil {
+        return fmt.Errorf("redis error - user sessions search failed: %w", err)
+    }
+
+    if len(sessions) > 0 {
+        if err := r.client.Del(ctx, sessions...).Err(); err != nil {
+            return err
+        }
+    }
+
+    return r.client.Del(ctx, userId.String()).Err()
 }
 
 func (r *SessionRepository) Get(ctx context.Context, token string) (*domain.Session, error) {
 	session := domain.Session{}
-	binary, err := r.client.Get(ctx, storageName + token).Bytes()
+	binary, err := r.client.Get(ctx, token).Bytes()
 	if err != nil {
 		if err == redis.Nil {
 			return nil, ErrSessionNotFound
@@ -91,6 +118,24 @@ func (r *SessionRepository) Get(ctx context.Context, token string) (*domain.Sess
 	}
 
 	return &session, nil
+}
+
+func (r *SessionRepository) GetUserSessions(ctx context.Context, userId uuid.UUID) ([]*domain.Session, error) {
+	result := make([]*domain.Session, 0)
+	sessions, err := r.client.SMembers(ctx, userId.String()).Result()
+	if err != nil {
+		return nil, fmt.Errorf("redis error - user sessions search failed: %w", err)
+	}
+
+	for _, refreshToken := range sessions {
+		s, err := r.Get(ctx, refreshToken)
+		if err != nil {
+			log.Printf("[WARNING] session deleted from its storage but not from user's set. token=%s", refreshToken)
+			continue
+		}
+		result = append(result, s)
+	}
+	return result, nil
 }
 
 func (r *SessionRepository) Exit() {

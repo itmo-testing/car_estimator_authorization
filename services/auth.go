@@ -17,6 +17,7 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrSourceChanged = errors.New("source changed")
+	ErrAlreadyLoggedIn = errors.New("already logged in")
 )
 
 type IUserProvider interface {
@@ -25,7 +26,8 @@ type IUserProvider interface {
 }
 
 type ISessionProvider interface {
-	Get(ctx context.Context, token string) (*domain.Session, error) 
+	Get(ctx context.Context, token string) (*domain.Session, error)
+	GetUserSessions(ctx context.Context, userId uuid.UUID) ([]*domain.Session, error)
 }
 
 type ISessionSaver interface {
@@ -34,6 +36,7 @@ type ISessionSaver interface {
 
 type ISessionRemover interface {
 	Delete(ctx context.Context, token string) error
+	DeleteUserSessions(ctx context.Context, userId uuid.UUID) error
 }
 
 type AuthService struct {
@@ -79,6 +82,17 @@ func (s *AuthService) Login(ctx context.Context, email, password string, source 
 
 	if err := bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(password)); err != nil {
 		return nil, fmt.Errorf("login error - %w", ErrInvalidCredentials)
+	}
+
+	userSessions, err := s.sessionProvider.GetUserSessions(ctx, user.Id)
+	if err != nil {
+		return nil, fmt.Errorf("login error - user sessions search failure: %w", err)
+	}
+
+	for _, session := range userSessions {
+		if source.IpAddress == session.IpAddress && source.UserAgent == session.UserAgent {
+			return nil, fmt.Errorf("login error - %w", ErrAlreadyLoggedIn)
+		}
 	}
 	
 	accessToken, err := CreateJWT(user)
