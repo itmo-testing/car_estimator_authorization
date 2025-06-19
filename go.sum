@@ -41,6 +41,8 @@ github.com/nikita-itmo-gh-acc/car_estimator_api_contracts v0.0.0-20250618203553-
 github.com/nikita-itmo-gh-acc/car_estimator_api_contracts v0.0.0-20250618203553-e487a86619af/go.mod h1:Vj0N65UtjY/sDf9yASXersCXwLEez6R6R3XqHOpHrrc=
 github.com/nikita-itmo-gh-acc/car_estimator_api_contracts v0.0.0-20250618204700-e0588b931f0e h1:9gcotEj29z991BdMiX97weH/MX21hXFjpbVF53bP8As=
 github.com/nikita-itmo-gh-acc/car_estimator_api_contracts v0.0.0-20250618204700-e0588b931f0e/go.mod h1:Vj0N65UtjY/sDf9yASXersCXwLEez6R6R3XqHOpHrrc=
+github.com/nikita-itmo-gh-acc/car_estimator_api_contracts v0.0.0-20250619214423-05ba64208e7d h1:++OHxdeHndF+WQppEu1rSkfTczT8M1DUv1ha5PdqaAY=
+github.com/nikita-itmo-gh-acc/car_estimator_api_contracts v0.0.0-20250619214423-05ba64208e7d/go.mod h1:Vj0N65UtjY/sDf9yASXersCXwLEez6R6R3XqHOpHrrc=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/redis/go-redis/v9 v9.10.0 h1:FxwK3eV8p/CQa0Ch276C7u2d0eNC9kCmAYQ7mCXCzVs=
 github.com/redis/go-redis/v9 v9.10.0/go.mod h1:huWgSWd8mW6+m0VPhJjSSQ+d6Nh1VICQ6Q5lHuCH/Iw=

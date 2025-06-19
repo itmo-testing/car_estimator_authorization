@@ -62,7 +62,7 @@ func NewAuthService (
 	}
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string, source domain.Source) (*domain.TokenPair, error) {
+func (s *AuthService) Login(ctx context.Context, email, password string, source domain.Source) (*domain.TokenPair, *uuid.UUID, error) {
 	log := s.logger.With(
 		slog.String("operation", "login"),
 		slog.String("email", email),
@@ -77,27 +77,27 @@ func (s *AuthService) Login(ctx context.Context, email, password string, source 
 		if errors.Is(err, database.ErrUserNotFound) {
 			s.logger.WarnContext(ctx, "user not found", slog.Any("error", err))
 		}
-		return nil, fmt.Errorf("login error - %w", ErrInvalidCredentials)
+		return nil, nil, fmt.Errorf("login error - %w", ErrInvalidCredentials)
 	}
 
 	if err := bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(password)); err != nil {
-		return nil, fmt.Errorf("login error - %w", ErrInvalidCredentials)
+		return nil, nil, fmt.Errorf("login error - %w", ErrInvalidCredentials)
 	}
 
 	userSessions, err := s.sessionProvider.GetUserSessions(ctx, user.Id)
 	if err != nil {
-		return nil, fmt.Errorf("login error - user sessions search failure: %w", err)
+		return nil, nil, fmt.Errorf("login error - user sessions search failure: %w", err)
 	}
 
 	for _, session := range userSessions {
 		if source.IpAddress == session.IpAddress && source.UserAgent == session.UserAgent {
-			return nil, fmt.Errorf("login error - %w", ErrAlreadyLoggedIn)
+			return nil, nil, fmt.Errorf("login error - %w", ErrAlreadyLoggedIn)
 		}
 	}
 	
 	accessToken, err := CreateJWT(user)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	newSession := &domain.Session{
@@ -109,14 +109,14 @@ func (s *AuthService) Login(ctx context.Context, email, password string, source 
 
 	refreshToken, err := s.sessionSaver.Save(ctx, newSession, time.Hour * 24 * 30)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	log.Info("successfully logged in!")
 	return &domain.TokenPair{
 		Access: accessToken,
 		Refresh: refreshToken,
-	}, nil
+	}, &(user.Id), nil
 }
 
 func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {

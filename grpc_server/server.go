@@ -26,7 +26,7 @@ type ServerAPI struct {
 }
 
 type IAuthService interface {
-	Login(ctx context.Context, email, password string, source domain.Source) (*domain.TokenPair, error)
+	Login(ctx context.Context, email, password string, source domain.Source) (*domain.TokenPair, *uuid.UUID, error)
 	Logout(ctx context.Context, refreshToken string) error
 	GetUser(ctx context.Context, userId uuid.UUID) (*domain.UserPublic, error)
 	Refresh(ctx context.Context, refreshToken string, source domain.Source) (*domain.TokenPair, error)
@@ -55,7 +55,7 @@ func GetRefreshToken(ctx context.Context) (string, error) {
 	return rt, nil
 }
 
-func (s *ServerAPI) Login(ctx context.Context, in *pb.LoginRequest) (t *pb.TokenResponse, err error) {
+func (s *ServerAPI) Login(ctx context.Context, in *pb.LoginRequest) (t *pb.LoginResponse, err error) {
 	if in.Email == "" {
 		return nil, status.Error(codes.InvalidArgument, "email is required")
 	}
@@ -66,7 +66,7 @@ func (s *ServerAPI) Login(ctx context.Context, in *pb.LoginRequest) (t *pb.Token
 
 	data := in.GetSource()
 
-	tokens, err := s.Auth.Login(ctx, in.GetEmail(), in.GetPassword(), domain.Source{IpAddress: data.Ip, UserAgent: data.UserAgent})
+	tokens, userId, err := s.Auth.Login(ctx, in.GetEmail(), in.GetPassword(), domain.Source{IpAddress: data.Ip, UserAgent: data.UserAgent})
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrInvalidCredentials):
@@ -78,9 +78,12 @@ func (s *ServerAPI) Login(ctx context.Context, in *pb.LoginRequest) (t *pb.Token
 		}
 	}
 
-	return &pb.TokenResponse{
-		AccessToken: tokens.Access, 
-		RefreshToken: tokens.Refresh,
+	return &pb.LoginResponse{
+		UserId: &pb.UUID{Value: userId.String()},
+		Tokens: &pb.TokenResponse{
+			AccessToken: tokens.Access, 
+			RefreshToken: tokens.Refresh,
+		},
 	}, nil
 }
 

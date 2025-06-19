@@ -18,7 +18,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/lib/pq v1.10.9 // indirect
-	github.com/nikita-itmo-gh-acc/car_estimator_api_contracts v0.0.0-20250618204700-e0588b931f0e // indirect
+	github.com/nikita-itmo-gh-acc/car_estimator_api_contracts v0.0.0-20250619214423-05ba64208e7d // indirect
 	github.com/redis/go-redis/v9 v9.10.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/crypto v0.39.0 // indirect

@@ -80,13 +80,13 @@ func TestLoginAndRefresh(t *testing.T) {
 		}
 
 		if !tt.wantErr {
-			if resp.GetAccessToken() == "" || resp.GetRefreshToken() == "" {
+			if resp.GetTokens().GetAccessToken() == "" || resp.GetTokens().GetRefreshToken() == "" {
 				t.Errorf("response has empty fields")
 				continue
 			}
 
 			md := metadata.Pairs(
-				"refreshToken", resp.GetRefreshToken(),
+				"refreshToken", resp.GetTokens().GetRefreshToken(),
 			)
 
     		ctx := metadata.NewOutgoingContext(ctx, md)
