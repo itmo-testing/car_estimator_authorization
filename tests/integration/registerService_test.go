@@ -1,4 +1,4 @@
-package tests
+package integration
 
 import (
 	"fmt"
@@ -14,13 +14,6 @@ import (
 	"github.com/nikita-itmo-gh-acc/car_estimator_authorization/domain"
 )
 
-
-type TestCase struct {
-	name string
-	args any
-	code codes.Code
-	wantErr bool
-}
 
 func TestRegister(t *testing.T) {
 	if err := godotenv.Load(); err != nil {
@@ -100,5 +93,7 @@ func TestRegister(t *testing.T) {
 		if code != tt.code {
 			t.Errorf("unexpected status: want %v, have %v", tt.code, code)
 		}
+
+		fmt.Println("PASSED!")
 	}
 }

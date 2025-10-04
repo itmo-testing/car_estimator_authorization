@@ -1,4 +1,4 @@
-package tests
+package integration
 
 import (
 	"fmt"
@@ -57,7 +57,7 @@ func TestLoginAndRefresh(t *testing.T) {
 	mockAddr, mockUserAgent := "localhost:9999", "Chrome/137.0.0.0"
 
 	for idx, tt := range tests {
-		fmt.Printf("[%d] name: %s\n", idx, tt.name)
+		fmt.Printf("[%d] name: %s...\n", idx, tt.name)
 
 		credentials, ok := tt.args.(Credentials)
 		if !ok {
@@ -107,5 +107,7 @@ func TestLoginAndRefresh(t *testing.T) {
 		if code != tt.code {
 			t.Errorf("unexpected status: want %v, have %v", tt.code, code)
 		}
+
+		fmt.Println("PASSED!")
 	}
 }

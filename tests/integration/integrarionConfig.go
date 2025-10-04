@@ -1,4 +1,4 @@
-package tests
+package integration
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 
 	pb "github.com/nikita-itmo-gh-acc/car_estimator_api_contracts/gen/profile_v1"
@@ -14,6 +15,13 @@ import (
 var (
 	defaultServerAddr = "auth_service_container:4444"
 )
+
+type TestCase struct {
+	name string
+	args any
+	code codes.Code
+	wantErr bool
+}
 
 func NewClient(t *testing.T, addr string) (context.Context, pb.ProfileServiceClient) {
 	t.Helper()
