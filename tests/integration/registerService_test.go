@@ -9,17 +9,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/joho/godotenv"
 	pb "github.com/nikita-itmo-gh-acc/car_estimator_api_contracts/gen/profile_v1"
 	"github.com/nikita-itmo-gh-acc/car_estimator_authorization/domain"
 )
 
-
 func TestRegister(t *testing.T) {
-	if err := godotenv.Load(); err != nil {
-		fmt.Println("warning: can't find .env file")
-	}
-
 	tests := []TestCase{
 		{
 			name: "register new user",
@@ -27,6 +21,7 @@ func TestRegister(t *testing.T) {
 				UserPublic: domain.UserPublic{
 					FullName: "Ananiev Nikita",
 					Email: "nikita-ananiev@mail.ru",
+					Phone: "79111111111",
 					BirthDate: time.Date(2004, time.June, 24, 0, 0, 0, 0, time.Local),
 				},
 				Password: "qwertty",
@@ -35,7 +30,7 @@ func TestRegister(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "missing email register",
+			name: "missing email and phone register",
 			args: domain.User{
 				UserPublic: domain.UserPublic{
 					FullName: "Shalunov Andrew",
@@ -52,6 +47,7 @@ func TestRegister(t *testing.T) {
 				UserPublic: domain.UserPublic{
 					FullName: "Ospelnikov Alex",
 					Email: "nikita-ananiev@mail.ru",
+					Phone: "79999999999",
 					BirthDate: time.Date(2004, time.September, 17, 0, 0, 0, 0, time.Local),
 				},
 				Password: "1qazxsw2",
@@ -61,7 +57,9 @@ func TestRegister(t *testing.T) {
 		},
 	}
 
-	ctx, client := NewClient(t, os.Getenv("APP_ADDR"))
+	defer CleanUpTestStorages(t, TestPGConn(t), nil)
+
+	ctx, client := NewClient(t, os.Getenv("TEST_APP_ADDR"))
 
 	for idx, tt := range tests {
 		fmt.Printf("[%d] name: %s\n", idx, tt.name)
@@ -74,6 +72,7 @@ func TestRegister(t *testing.T) {
 		resp, err := client.Register(ctx, &pb.RegisterRequest{
 			Fullname: user.FullName,
 			Email: user.Email,
+			Phone: user.Phone,
 			Password: user.Password,
 			Birthdate: user.BirthDate.Unix(),
 		})

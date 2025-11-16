@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/joho/godotenv"
 	pb "github.com/nikita-itmo-gh-acc/car_estimator_api_contracts/gen/profile_v1"
+	"github.com/nikita-itmo-gh-acc/car_estimator_authorization/domain"
 )
 
 type Credentials struct {
@@ -19,10 +20,6 @@ type Credentials struct {
 }
 
 func TestLoginAndRefresh(t *testing.T) {
-	if err := godotenv.Load(); err != nil {
-		fmt.Println("warning: can't find .env file")
-	}
-
 	tests := []TestCase{
 		{
 			name: "common login operation",
@@ -53,7 +50,22 @@ func TestLoginAndRefresh(t *testing.T) {
 		},
 	}
 
-	ctx, client := NewClient(t, os.Getenv("APP_ADDR"))
+	pgConn := TestPGConn(t)
+	redisConn := TestRedisConn(t)
+
+	userToCreate := &domain.User{
+		UserPublic: domain.UserPublic{
+			FullName: "Ananiev Nikita",
+			Email: "nikita-ananiev@mail.ru",
+			BirthDate: time.Date(2004, time.June, 24, 0, 0, 0, 0, time.Local),
+		},
+		Password: "qwertty",
+	}
+
+	CreateTestUser(t, pgConn, userToCreate)
+	defer CleanUpTestStorages(t, pgConn, redisConn)
+
+	ctx, client := NewClient(t, os.Getenv("TEST_APP_ADDR"))
 	mockAddr, mockUserAgent := "localhost:9999", "Chrome/137.0.0.0"
 
 	for idx, tt := range tests {

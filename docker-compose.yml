@@ -55,6 +55,23 @@ services:
         condition: service_healthy
     networks:
       - shared_network
+  
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile-test
+    container_name: test_container
+    ports:
+      - 4445:4445
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - shared_network
 
 volumes:
   pgData:

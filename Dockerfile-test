@@ -1,0 +1,27 @@
+FROM golang:1.23 as builder
+
+ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
+
+WORKDIR /build
+
+COPY go.mod go.sum ./
+
+RUN go mod download
+
+COPY . .
+
+RUN go test ./tests/unit -c -o unit.test
+RUN go test ./tests/integration -c -o integration.test
+
+FROM alpine:latest as runner
+
+WORKDIR /car_estimator_tests
+
+COPY --from=builder /build/database/migrations ./database/migrations
+COPY --from=builder /build/.env .
+COPY --from=builder /build/integration.test .
+COPY --from=builder /build/unit.test .
+
+EXPOSE 4445
+
+CMD ["./integration.test"]
